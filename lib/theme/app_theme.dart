@@ -86,8 +86,10 @@ class AppTheme {
           borderRadius: BorderRadius.circular(16),
           borderSide: const BorderSide(color: AppColors.orange, width: 2),
         ),
-        contentPadding:
-            const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
       ),
       filledButtonTheme: FilledButtonThemeData(
         style: FilledButton.styleFrom(
@@ -95,8 +97,9 @@ class AppTheme {
           foregroundColor: Colors.white,
           minimumSize: const Size.fromHeight(54),
           textStyle: const TextStyle(fontSize: 17, fontWeight: FontWeight.w700),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -105,8 +108,9 @@ class AppTheme {
           minimumSize: const Size.fromHeight(54),
           side: const BorderSide(color: AppColors.orange, width: 1.5),
           textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
-          shape:
-              RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(18),
+          ),
         ),
       ),
       dialogTheme: DialogThemeData(

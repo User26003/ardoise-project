@@ -70,8 +70,8 @@ class WaxHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final r = radius ??
-        const BorderRadius.vertical(bottom: Radius.circular(32));
+    final r =
+        radius ?? const BorderRadius.vertical(bottom: Radius.circular(32));
     return ClipRRect(
       borderRadius: r,
       child: Container(
@@ -79,7 +79,10 @@ class WaxHeader extends StatelessWidget {
         child: Stack(
           children: [
             Positioned.fill(child: CustomPaint(painter: WaxPatternPainter())),
-            SafeArea(bottom: false, child: Padding(padding: padding, child: child)),
+            SafeArea(
+              bottom: false,
+              child: Padding(padding: padding, child: child),
+            ),
           ],
         ),
       ),
@@ -94,8 +97,8 @@ class ClientAvatar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color =
-        AppColors.avatarColors[client.colorIndex % AppColors.avatarColors.length];
+    final color = AppColors
+        .avatarColors[client.colorIndex % AppColors.avatarColors.length];
     return Container(
       width: size,
       height: size,
@@ -205,10 +208,7 @@ class StatTile extends StatelessWidget {
             ),
             if (sub != null) ...[
               const SizedBox(height: 2),
-              Text(
-                sub!,
-                style: TextStyle(fontSize: 12, color: color),
-              ),
+              Text(sub!, style: TextStyle(fontSize: 12, color: color)),
             ],
           ],
         ),
@@ -264,8 +264,7 @@ class EmptyState extends StatelessWidget {
 void showToast(BuildContext context, String message, {Color? color}) {
   ScaffoldMessenger.of(context)
     ..hideCurrentSnackBar()
-    ..showSnackBar(SnackBar(
-      content: Text(message),
-      backgroundColor: color ?? AppColors.ink,
-    ));
+    ..showSnackBar(
+      SnackBar(content: Text(message), backgroundColor: color ?? AppColors.ink),
+    );
 }

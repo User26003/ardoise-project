@@ -11,6 +11,7 @@ import 'screens/settings_screen.dart';
 import 'screens/stats_screen.dart';
 import 'services/storage_service.dart';
 import 'theme/app_theme.dart';
+import 'utils/responsive.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -20,16 +21,15 @@ Future<void> main() async {
   final provider = ArdoiseProvider(storage);
   await provider.load();
 
-  SystemChrome.setSystemUIOverlayStyle(const SystemUiOverlayStyle(
-    statusBarColor: Colors.transparent,
-    statusBarIconBrightness: Brightness.light,
-  ));
+  SystemChrome.setSystemUIOverlayStyle(
+    const SystemUiOverlayStyle(
+      statusBarColor: Colors.transparent,
+      statusBarIconBrightness: Brightness.light,
+    ),
+  );
 
   runApp(
-    ChangeNotifierProvider.value(
-      value: provider,
-      child: const ArdoiseApp(),
-    ),
+    ChangeNotifierProvider.value(value: provider, child: const ArdoiseApp()),
   );
 }
 
@@ -49,6 +49,18 @@ class ArdoiseApp extends StatelessWidget {
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,
       ],
+      // Empêche le texte système très agrandi de casser la mise en page
+      builder: (context, child) {
+        final mq = MediaQuery.of(context);
+        final clamped = mq.textScaler.clamp(
+          minScaleFactor: 0.85,
+          maxScaleFactor: 1.3,
+        );
+        return MediaQuery(
+          data: mq.copyWith(textScaler: clamped),
+          child: child!,
+        );
+      },
       home: const RootScreen(),
     );
   }
@@ -100,6 +112,8 @@ class _MicFab extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final short = R.isShort(context);
+    final size = short ? 62.0 : 74.0;
     return GestureDetector(
       onTap: onTap,
       onLongPress: onLongPress,
@@ -107,8 +121,8 @@ class _MicFab extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         children: [
           Container(
-            width: 74,
-            height: 74,
+            width: size,
+            height: size,
             decoration: BoxDecoration(
               shape: BoxShape.circle,
               gradient: AppColors.headerGradient,
@@ -121,7 +135,11 @@ class _MicFab extends StatelessWidget {
                 ),
               ],
             ),
-            child: const Icon(Icons.mic_rounded, color: Colors.white, size: 34),
+            child: Icon(
+              Icons.mic_rounded,
+              color: Colors.white,
+              size: short ? 28 : 34,
+            ),
           ),
         ],
       ),
@@ -137,10 +155,17 @@ class _PillNavBar extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final bottomPad = MediaQuery.of(context).padding.bottom;
+    final short = R.isShort(context);
+    final wide = R.isWide(context);
     return Padding(
-      padding: EdgeInsets.fromLTRB(16, 0, 16, 12 + bottomPad),
+      padding: EdgeInsets.fromLTRB(
+        wide ? (R.width(context) - 420) / 2 : 16,
+        0,
+        wide ? (R.width(context) - 420) / 2 : 16,
+        (short ? 6 : 12) + bottomPad,
+      ),
       child: Container(
-        height: 68,
+        height: short ? 58 : 68,
         decoration: BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.circular(34),

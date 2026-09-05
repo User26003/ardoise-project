@@ -20,9 +20,8 @@ class StorageService {
   }
 
   // ---------- Clients ----------
-  List<Client> getClients() => _clients.values
-      .map((e) => Client.fromMap(e as Map))
-      .toList();
+  List<Client> getClients() =>
+      _clients.values.map((e) => Client.fromMap(e as Map)).toList();
 
   Future<void> saveClient(Client c) => _clients.put(c.id, c.toMap());
 
@@ -37,9 +36,8 @@ class StorageService {
   }
 
   // ---------- Transactions ----------
-  List<Transaction> getTransactions() => _transactions.values
-      .map((e) => Transaction.fromMap(e as Map))
-      .toList();
+  List<Transaction> getTransactions() =>
+      _transactions.values.map((e) => Transaction.fromMap(e as Map)).toList();
 
   Future<void> saveTransaction(Transaction t) =>
       _transactions.put(t.id, t.toMap());
@@ -50,9 +48,11 @@ class StorageService {
   ShopProfile getProfile() =>
       ShopProfile.fromMap(_settings.get('profile') as Map?);
 
-  Future<void> saveProfile(ShopProfile p) => _settings.put('profile', p.toMap());
+  Future<void> saveProfile(ShopProfile p) =>
+      _settings.put('profile', p.toMap());
 
-  bool get onboardingDone => (_settings.get('onboardingDone') as bool?) ?? false;
+  bool get onboardingDone =>
+      (_settings.get('onboardingDone') as bool?) ?? false;
   Future<void> setOnboardingDone() => _settings.put('onboardingDone', true);
 
   bool get demoSeeded => (_settings.get('demoSeeded') as bool?) ?? false;

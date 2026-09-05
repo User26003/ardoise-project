@@ -25,24 +25,86 @@ class VoiceParseResult {
 class VoiceParser {
   // Mots-clés de paiement (sans accents : le texte est normalisé avant test)
   static const _paymentWords = [
-    'paye', 'payer', 'rembourse', 'remboursement',
-    'verse', 'donne', 'regle', 'solde',
+    'paye',
+    'payer',
+    'rembourse',
+    'remboursement',
+    'verse',
+    'donne',
+    'regle',
+    'solde',
   ];
 
   static const _stopWords = {
-    'a', 'à', 'pris', 'prend', 'pour', 'de', 'du', 'des', 'la', 'le', 'les',
-    'l', 'un', 'une', 'et', 'francs', 'franc', 'fcfa', 'f', 'cfa', 'chez',
-    'crédit', 'credit', 'ardoise', 'doit', 'me', 'moi', 'sur', 'en', 'd',
-    'note', 'ajoute', 'ajouter', 'noter', 'mets', 'met',
+    'a',
+    'à',
+    'pris',
+    'prend',
+    'pour',
+    'de',
+    'du',
+    'des',
+    'la',
+    'le',
+    'les',
+    'l',
+    'un',
+    'une',
+    'et',
+    'francs',
+    'franc',
+    'fcfa',
+    'f',
+    'cfa',
+    'chez',
+    'crédit',
+    'credit',
+    'ardoise',
+    'doit',
+    'me',
+    'moi',
+    'sur',
+    'en',
+    'd',
+    'note',
+    'ajoute',
+    'ajouter',
+    'noter',
+    'mets',
+    'met',
   };
 
   static const _numberWords = <String, int>{
-    'zéro': 0, 'zero': 0, 'un': 1, 'une': 1, 'deux': 2, 'trois': 3,
-    'quatre': 4, 'cinq': 5, 'six': 6, 'sept': 7, 'huit': 8, 'neuf': 9,
-    'dix': 10, 'onze': 11, 'douze': 12, 'treize': 13, 'quatorze': 14,
-    'quinze': 15, 'seize': 16, 'vingt': 20, 'vingts': 20, 'trente': 30,
-    'quarante': 40, 'cinquante': 50, 'soixante': 60, 'cent': 100,
-    'cents': 100, 'mille': 1000, 'mil': 1000, 'million': 1000000,
+    'zéro': 0,
+    'zero': 0,
+    'un': 1,
+    'une': 1,
+    'deux': 2,
+    'trois': 3,
+    'quatre': 4,
+    'cinq': 5,
+    'six': 6,
+    'sept': 7,
+    'huit': 8,
+    'neuf': 9,
+    'dix': 10,
+    'onze': 11,
+    'douze': 12,
+    'treize': 13,
+    'quatorze': 14,
+    'quinze': 15,
+    'seize': 16,
+    'vingt': 20,
+    'vingts': 20,
+    'trente': 30,
+    'quarante': 40,
+    'cinquante': 50,
+    'soixante': 60,
+    'cent': 100,
+    'cents': 100,
+    'mille': 1000,
+    'mil': 1000,
+    'million': 1000000,
   };
 
   static VoiceParseResult parse(String input) {
@@ -63,8 +125,9 @@ class VoiceParser {
 
     // Montant : chiffres (avec espaces/points comme séparateurs de milliers)
     int? amount;
-    final digitMatch =
-        RegExp(r'(\d{1,3}(?:[ .]\d{3})+|\d+)').allMatches(text).toList();
+    final digitMatch = RegExp(
+      r'(\d{1,3}(?:[ .]\d{3})+|\d+)',
+    ).allMatches(text).toList();
     if (digitMatch.isNotEmpty) {
       // On prend le dernier nombre (le montant vient généralement en fin)
       final m = digitMatch.last;

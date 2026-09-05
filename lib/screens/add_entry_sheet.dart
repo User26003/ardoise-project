@@ -9,6 +9,7 @@ import '../providers/ardoise_provider.dart';
 import '../services/voice_parser.dart';
 import '../theme/app_theme.dart';
 import '../utils/formatters.dart';
+import '../utils/responsive.dart';
 import '../widgets/common.dart';
 
 /// Ouvre la feuille d'ajout. [startListening] lance directement le micro.
@@ -22,6 +23,7 @@ Future<void> showAddEntrySheet(
     context: context,
     isScrollControlled: true,
     useSafeArea: true,
+    constraints: const BoxConstraints(maxWidth: R.maxContentWidth),
     builder: (_) => AddEntrySheet(
       startListening: startListening,
       presetClientId: presetClientId,
@@ -60,6 +62,7 @@ class _AddEntrySheetState extends State<AddEntrySheet> {
   PaymentMethod _method = PaymentMethod.cash;
   Client? _matchedClient;
   bool _saving = false;
+  DateTime? _promiseDate;
 
   static const _examples = [
     '« Codjo, riz, 500 »',
@@ -73,10 +76,13 @@ class _AddEntrySheetState extends State<AddEntrySheet> {
     super.initState();
     _isPayment = widget.presetPayment;
     if (widget.presetClientId != null) {
-      final c = context.read<ArdoiseProvider>().clientById(widget.presetClientId!);
+      final c = context.read<ArdoiseProvider>().clientById(
+        widget.presetClientId!,
+      );
       if (c != null) {
         _matchedClient = c;
         _nameCtrl.text = c.name;
+        _promiseDate = c.promiseDate;
       }
     }
     _nameCtrl.addListener(_onNameChanged);
@@ -181,7 +187,28 @@ class _AddEntrySheetState extends State<AddEntrySheet> {
   void _onNameChanged() {
     final p = context.read<ArdoiseProvider>();
     final m = p.findClientByName(_nameCtrl.text);
-    if (m?.id != _matchedClient?.id) setState(() => _matchedClient = m);
+    if (m?.id != _matchedClient?.id) {
+      setState(() {
+        _matchedClient = m;
+        _promiseDate = m?.promiseDate;
+      });
+    }
+  }
+
+  Future<void> _pickPromise() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _promiseDate != null && _promiseDate!.isAfter(now)
+          ? _promiseDate!
+          : now.add(const Duration(days: 7)),
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: now.add(const Duration(days: 365)),
+      helpText: 'Il paie quand ?',
+      confirmText: 'Valider',
+      cancelText: 'Annuler',
+    );
+    if (picked != null) setState(() => _promiseDate = picked);
   }
 
   int get _amount =>
@@ -193,14 +220,30 @@ class _AddEntrySheetState extends State<AddEntrySheet> {
     if (!_canSave || _saving) return;
     setState(() => _saving = true);
     final p = context.read<ArdoiseProvider>();
-    Client client = _matchedClient ??
-        await p.addClient(_nameCtrl.text.trim(), phone: _phoneCtrl.text);
+    Client client =
+        _matchedClient ??
+        await p.addClient(
+          _nameCtrl.text.trim(),
+          phone: _phoneCtrl.text,
+          promiseDate: _promiseDate,
+        );
     final viaVoice = _heard.isNotEmpty;
     if (_isPayment) {
       await p.addPayment(client.id, _amount, method: _method);
+      // Si l'ardoise est soldée, la promesse n'a plus d'objet.
+      if (p.summaryOf(client).balance <= 0 && client.promiseDate != null) {
+        await p.setPromiseDate(client.id, null);
+      }
     } else {
-      await p.addCredit(client.id, _amount,
-          label: _labelCtrl.text, viaVoice: viaVoice);
+      await p.addCredit(
+        client.id,
+        _amount,
+        label: _labelCtrl.text,
+        viaVoice: viaVoice,
+      );
+      if (_matchedClient != null && _promiseDate != client.promiseDate) {
+        await p.setPromiseDate(client.id, _promiseDate);
+      }
     }
     if (!mounted) return;
     HapticFeedback.heavyImpact();
@@ -227,13 +270,16 @@ class _AddEntrySheetState extends State<AddEntrySheet> {
   @override
   Widget build(BuildContext context) {
     final p = context.watch<ArdoiseProvider>();
-    final isNewClient = _matchedClient == null && _nameCtrl.text.trim().isNotEmpty;
+    final isNewClient =
+        _matchedClient == null && _nameCtrl.text.trim().isNotEmpty;
     final bottom = MediaQuery.of(context).viewInsets.bottom;
+    final hp = R.hPad(context) + 4;
+    final short = R.isShort(context);
 
     return Padding(
       padding: EdgeInsets.only(bottom: bottom),
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+        padding: EdgeInsets.fromLTRB(hp, 12, hp, 24),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.stretch,
@@ -254,11 +300,12 @@ class _AddEntrySheetState extends State<AddEntrySheet> {
               isPayment: _isPayment,
               onChanged: (v) => setState(() => _isPayment = v),
             ),
-            const SizedBox(height: 18),
+            SizedBox(height: short ? 10 : 18),
             // ---- Micro ----
             _MicButton(
               listening: _listening,
               available: _speechAvailable,
+              small: short,
               onTap: _listening ? _stopListening : _startListening,
             ),
             const SizedBox(height: 10),
@@ -266,10 +313,10 @@ class _AddEntrySheetState extends State<AddEntrySheet> {
               _listening
                   ? (_heard.isEmpty ? 'Je vous écoute…' : _heard)
                   : (_heard.isNotEmpty
-                      ? 'Entendu : « $_heard »'
-                      : (_speechAvailable
-                          ? 'Appuyez et dites par ex. ${_examples[DateTime.now().second % _examples.length]}'
-                          : (_speechError ?? 'Micro indisponible'))),
+                        ? 'Entendu : « $_heard »'
+                        : (_speechAvailable
+                              ? 'Appuyez et dites par ex. ${_examples[DateTime.now().second % _examples.length]}'
+                              : (_speechError ?? 'Micro indisponible'))),
               textAlign: TextAlign.center,
               style: TextStyle(
                 color: _listening ? AppColors.deepOrange : AppColors.inkSoft,
@@ -291,8 +338,10 @@ class _AddEntrySheetState extends State<AddEntrySheet> {
                 Expanded(child: Divider(color: Colors.grey.shade300)),
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 12),
-                  child: Text('ou à la main',
-                      style: TextStyle(color: AppColors.inkSoft, fontSize: 12)),
+                  child: Text(
+                    'ou à la main',
+                    style: TextStyle(color: AppColors.inkSoft, fontSize: 12),
+                  ),
                 ),
                 Expanded(child: Divider(color: Colors.grey.shade300)),
               ],
@@ -308,9 +357,11 @@ class _AddEntrySheetState extends State<AddEntrySheet> {
                 suffixIcon: _matchedClient != null
                     ? const Icon(Icons.check_circle, color: AppColors.green)
                     : (isNewClient
-                        ? const Icon(Icons.person_add_alt_1,
-                            color: AppColors.amber)
-                        : null),
+                          ? const Icon(
+                              Icons.person_add_alt_1,
+                              color: AppColors.amber,
+                            )
+                          : null),
                 helperText: _matchedClient != null
                     ? 'Client existant · doit ${Fmt.fcfa(p.summaryOf(_matchedClient!).balance)}'
                     : (isNewClient ? 'Nouveau client — sera créé' : null),
@@ -414,12 +465,76 @@ class _AddEntrySheetState extends State<AddEntrySheet> {
                 );
               }).toList(),
             ),
+            if (!_isPayment) ...[
+              const SizedBox(height: 12),
+              // ---- Date promise ----
+              InkWell(
+                borderRadius: BorderRadius.circular(16),
+                onTap: _pickPromise,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: _promiseDate != null
+                        ? AppColors.amber.withValues(alpha: 0.18)
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(
+                      color: _promiseDate != null
+                          ? AppColors.amber
+                          : const Color(0xFFF1DCCB),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.event_available_rounded,
+                        color: _promiseDate != null
+                            ? const Color(0xFFB57400)
+                            : AppColors.inkSoft,
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Text(
+                          _promiseDate == null
+                              ? 'Il paie quand ? (optionnel)'
+                              : 'Promet de payer le ${Fmt.shortDate(_promiseDate!)}',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: _promiseDate != null
+                                ? const Color(0xFF6B4500)
+                                : AppColors.inkSoft,
+                          ),
+                        ),
+                      ),
+                      if (_promiseDate != null)
+                        GestureDetector(
+                          onTap: () => setState(() => _promiseDate = null),
+                          child: const Icon(
+                            Icons.close,
+                            size: 18,
+                            color: AppColors.inkSoft,
+                          ),
+                        )
+                      else
+                        const Icon(
+                          Icons.chevron_right,
+                          color: AppColors.inkSoft,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
             const SizedBox(height: 20),
             FilledButton.icon(
               onPressed: _canSave && !_saving ? _save : null,
               style: FilledButton.styleFrom(
-                backgroundColor:
-                    _isPayment ? AppColors.green : AppColors.orange,
+                backgroundColor: _isPayment
+                    ? AppColors.green
+                    : AppColors.orange,
               ),
               icon: Icon(_isPayment ? Icons.check_rounded : Icons.edit_note),
               label: Text(
@@ -450,17 +565,32 @@ class _TypeToggle extends StatelessWidget {
       ),
       child: Row(
         children: [
-          _seg('Crédit (doit)', Icons.add_shopping_cart, !isPayment,
-              AppColors.orange, () => onChanged(false)),
-          _seg('Paiement (a payé)', Icons.check_circle_outline, isPayment,
-              AppColors.green, () => onChanged(true)),
+          _seg(
+            'Crédit (doit)',
+            Icons.add_shopping_cart,
+            !isPayment,
+            AppColors.orange,
+            () => onChanged(false),
+          ),
+          _seg(
+            'Paiement (a payé)',
+            Icons.check_circle_outline,
+            isPayment,
+            AppColors.green,
+            () => onChanged(true),
+          ),
         ],
       ),
     );
   }
 
-  Widget _seg(String label, IconData icon, bool sel, Color color,
-      VoidCallback onTap) {
+  Widget _seg(
+    String label,
+    IconData icon,
+    bool sel,
+    Color color,
+    VoidCallback onTap,
+  ) {
     return Expanded(
       child: GestureDetector(
         onTap: onTap,
@@ -474,7 +604,11 @@ class _TypeToggle extends StatelessWidget {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 18, color: sel ? Colors.white : AppColors.inkSoft),
+              Icon(
+                icon,
+                size: 18,
+                color: sel ? Colors.white : AppColors.inkSoft,
+              ),
               const SizedBox(width: 6),
               Text(
                 label,
@@ -495,11 +629,13 @@ class _TypeToggle extends StatelessWidget {
 class _MicButton extends StatefulWidget {
   final bool listening;
   final bool available;
+  final bool small;
   final VoidCallback onTap;
   const _MicButton({
     required this.listening,
     required this.available,
     required this.onTap,
+    this.small = false,
   });
 
   @override
@@ -522,12 +658,14 @@ class _MicButtonState extends State<_MicButton>
   @override
   Widget build(BuildContext context) {
     final color = widget.available ? AppColors.orange : Colors.grey;
+    final box = widget.small ? 84.0 : 120.0;
+    final core = widget.small ? 62.0 : 84.0;
     return Center(
       child: GestureDetector(
         onTap: widget.available ? widget.onTap : null,
         child: SizedBox(
-          width: 120,
-          height: 120,
+          width: box,
+          height: box,
           child: AnimatedBuilder(
             animation: _ctrl,
             builder: (context, _) {
@@ -536,21 +674,24 @@ class _MicButtonState extends State<_MicButton>
                 children: [
                   if (widget.listening)
                     for (final k in [0.0, 0.5])
-                      Builder(builder: (_) {
-                        final t = (_ctrl.value + k) % 1.0;
-                        return Container(
-                          width: 80 + 40 * t,
-                          height: 80 + 40 * t,
-                          decoration: BoxDecoration(
-                            shape: BoxShape.circle,
-                            color: AppColors.deepOrange
-                                .withValues(alpha: (1 - t) * 0.35),
-                          ),
-                        );
-                      }),
+                      Builder(
+                        builder: (_) {
+                          final t = (_ctrl.value + k) % 1.0;
+                          return Container(
+                            width: core - 4 + (box - core + 4) * t,
+                            height: core - 4 + (box - core + 4) * t,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: AppColors.deepOrange.withValues(
+                                alpha: (1 - t) * 0.35,
+                              ),
+                            ),
+                          );
+                        },
+                      ),
                   Container(
-                    width: 84,
-                    height: 84,
+                    width: core,
+                    height: core,
                     decoration: BoxDecoration(
                       shape: BoxShape.circle,
                       gradient: widget.available
@@ -568,7 +709,7 @@ class _MicButtonState extends State<_MicButton>
                     child: Icon(
                       widget.listening ? Icons.stop_rounded : Icons.mic_rounded,
                       color: Colors.white,
-                      size: 40,
+                      size: widget.small ? 30 : 40,
                     ),
                   ),
                 ],
@@ -601,7 +742,9 @@ class _MethodChip extends StatelessWidget {
         duration: const Duration(milliseconds: 160),
         padding: const EdgeInsets.symmetric(vertical: 14),
         decoration: BoxDecoration(
-          color: selected ? AppColors.green.withValues(alpha: 0.12) : Colors.white,
+          color: selected
+              ? AppColors.green.withValues(alpha: 0.12)
+              : Colors.white,
           borderRadius: BorderRadius.circular(16),
           border: Border.all(
             color: selected ? AppColors.green : const Color(0xFFF1DCCB),

@@ -17,8 +17,24 @@ class SmsService {
     final buffer = StringBuffer()
       ..write('Bonjour ${client.name}, ')
       ..write('petit rappel de $shop : ')
-      ..write('votre ardoise est de ${Fmt.fcfa(balance)}. ')
-      ..write('Merci de passer régler quand vous pouvez.');
+      ..write('votre ardoise est de ${Fmt.fcfa(balance)}. ');
+    final promise = client.promiseDate;
+    if (promise != null) {
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final day = DateTime(promise.year, promise.month, promise.day);
+      if (day.isBefore(today)) {
+        buffer.write(
+          'La date convenue (${Fmt.shortDate(promise)}) est passée, merci de passer régler.',
+        );
+      } else {
+        buffer.write(
+          'Comme convenu, merci de passer régler le ${Fmt.shortDate(promise)}.',
+        );
+      }
+    } else {
+      buffer.write('Merci de passer régler quand vous pouvez.');
+    }
     if (profile.phone.isNotEmpty) {
       buffer.write(' Mobile Money : ${profile.phone}');
     }
@@ -31,7 +47,11 @@ class SmsService {
     required ShopProfile profile,
   }) async {
     if (client.phone.trim().isEmpty) return false;
-    final body = buildReminder(client: client, balance: balance, profile: profile);
+    final body = buildReminder(
+      client: client,
+      balance: balance,
+      profile: profile,
+    );
     final phone = client.phone.replaceAll(RegExp(r'[^\d+]'), '');
     final uri = Uri(
       scheme: 'sms',

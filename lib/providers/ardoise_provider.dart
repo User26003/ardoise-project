@@ -27,6 +27,26 @@ class ClientSummary {
   int get daysSinceActivity => lastActivity == null
       ? 0
       : DateTime.now().difference(lastActivity!).inDays;
+
+  DateTime? get promiseDate => client.promiseDate;
+
+  /// Jours restants avant la date promise (négatif = dépassée).
+  int? get daysToPromise {
+    final d = promiseDate;
+    if (d == null) return null;
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return DateTime(d.year, d.month, d.day).difference(today).inDays;
+  }
+
+  /// Nombre de jours de retard (0 si pas en retard).
+  int lateDays(int reminderDays) {
+    if (balance <= 0) return 0;
+    final dp = daysToPromise;
+    if (dp != null) return dp < 0 ? -dp : 0;
+    final d = daysSinceActivity - reminderDays;
+    return d > 0 ? d : 0;
+  }
 }
 
 enum ClientFilter { all, today, late, paid }
@@ -89,13 +109,18 @@ class ArdoiseProvider extends ChangeNotifier {
     return null;
   }
 
-  Future<Client> addClient(String name, {String phone = ''}) async {
+  Future<Client> addClient(
+    String name, {
+    String phone = '',
+    DateTime? promiseDate,
+  }) async {
     final c = Client(
       id: _uuid.v4(),
       name: name.trim(),
       phone: phone.trim(),
       createdAt: DateTime.now(),
       colorIndex: _clients.length % 8,
+      promiseDate: promiseDate,
     );
     _clients.add(c);
     await _storage.saveClient(c);
@@ -118,8 +143,13 @@ class ArdoiseProvider extends ChangeNotifier {
   }
 
   // ---------- Transactions ----------
-  Future<Transaction> addCredit(String clientId, int amount,
-      {String label = '', bool viaVoice = false, DateTime? date}) async {
+  Future<Transaction> addCredit(
+    String clientId,
+    int amount, {
+    String label = '',
+    bool viaVoice = false,
+    DateTime? date,
+  }) async {
     final t = Transaction(
       id: _uuid.v4(),
       clientId: clientId,
@@ -135,8 +165,12 @@ class ArdoiseProvider extends ChangeNotifier {
     return t;
   }
 
-  Future<Transaction> addPayment(String clientId, int amount,
-      {PaymentMethod method = PaymentMethod.cash, DateTime? date}) async {
+  Future<Transaction> addPayment(
+    String clientId,
+    int amount, {
+    PaymentMethod method = PaymentMethod.cash,
+    DateTime? date,
+  }) async {
     final t = Transaction(
       id: _uuid.v4(),
       clientId: clientId,
@@ -172,7 +206,9 @@ class ArdoiseProvider extends ChangeNotifier {
       if (t.clientId != c.id) continue;
       if (t.isCredit) {
         credited += t.amount;
-        if (lastCredit == null || t.date.isAfter(lastCredit)) lastCredit = t.date;
+        if (lastCredit == null || t.date.isAfter(lastCredit)) {
+          lastCredit = t.date;
+        }
       } else {
         paid += t.amount;
         if (lastPayment == null || t.date.isAfter(lastPayment)) {
@@ -202,8 +238,33 @@ class ArdoiseProvider extends ChangeNotifier {
     return list;
   }
 
-  bool isLate(ClientSummary s) =>
-      s.balance > 0 && s.daysSinceActivity >= _profile.reminderDays;
+  /// Un client est en retard si :
+  ///  - il a une date promise et celle-ci est dépassée (retard dès le lendemain) ;
+  ///  - sinon, s'il n'a rien payé depuis `reminderDays` jours.
+  bool isLate(ClientSummary s) {
+    if (s.balance <= 0) return false;
+    final dp = s.daysToPromise;
+    if (dp != null) return dp < 0;
+    return s.daysSinceActivity >= _profile.reminderDays;
+  }
+
+  /// Clients dont la promesse tombe aujourd'hui ou demain.
+  List<ClientSummary> get upcomingPromises => allSummaries
+      .where(
+        (s) =>
+            s.balance > 0 &&
+            s.daysToPromise != null &&
+            s.daysToPromise! >= 0 &&
+            s.daysToPromise! <= 1,
+      )
+      .toList();
+
+  Future<void> setPromiseDate(String clientId, DateTime? date) async {
+    final c = clientById(clientId);
+    if (c == null) return;
+    c.promiseDate = date;
+    await updateClient(c);
+  }
 
   List<ClientSummary> get filteredSummaries {
     final today = DateTime.now();
@@ -212,11 +273,13 @@ class ArdoiseProvider extends ChangeNotifier {
       case ClientFilter.all:
         break;
       case ClientFilter.today:
-        list = list.where((s) =>
-            s.lastActivity != null &&
-            s.lastActivity!.year == today.year &&
-            s.lastActivity!.month == today.month &&
-            s.lastActivity!.day == today.day);
+        list = list.where(
+          (s) =>
+              s.lastActivity != null &&
+              s.lastActivity!.year == today.year &&
+              s.lastActivity!.month == today.month &&
+              s.lastActivity!.day == today.day,
+        );
         break;
       case ClientFilter.late:
         list = list.where(isLate);
@@ -227,9 +290,11 @@ class ArdoiseProvider extends ChangeNotifier {
     }
     if (search.trim().isNotEmpty) {
       final q = _normalize(search);
-      list = list.where((s) =>
-          _normalize(s.client.name).contains(q) ||
-          s.client.phone.contains(search.trim()));
+      list = list.where(
+        (s) =>
+            _normalize(s.client.name).contains(q) ||
+            s.client.phone.contains(search.trim()),
+      );
     }
     return list.toList();
   }
@@ -261,7 +326,8 @@ class ArdoiseProvider extends ChangeNotifier {
 
   int paidBetween(DateTime from, DateTime to) => _transactions
       .where(
-          (t) => !t.isCredit && !t.date.isBefore(from) && t.date.isBefore(to))
+        (t) => !t.isCredit && !t.date.isBefore(from) && t.date.isBefore(to),
+      )
       .fold(0, (s, t) => s + t.amount);
 
   int get todayCredited {
@@ -279,13 +345,17 @@ class ArdoiseProvider extends ChangeNotifier {
   int get monthCredited {
     final d = DateTime.now();
     return creditedBetween(
-        DateTime(d.year, d.month, 1), DateTime(d.year, d.month + 1, 1));
+      DateTime(d.year, d.month, 1),
+      DateTime(d.year, d.month + 1, 1),
+    );
   }
 
   int get monthPaid {
     final d = DateTime.now();
     return paidBetween(
-        DateTime(d.year, d.month, 1), DateTime(d.year, d.month + 1, 1));
+      DateTime(d.year, d.month, 1),
+      DateTime(d.year, d.month + 1, 1),
+    );
   }
 
   int get mobileMoneyTotal => _transactions
@@ -353,32 +423,59 @@ class ArdoiseProvider extends ChangeNotifier {
   Future<void> _seedDemo() async {
     final now = DateTime.now();
     final demo = [
-      ('Codjo', '97 12 34 56', [
-        (5, 'Riz', 1500, true),
-        (3, 'Huile', 800, true),
-        (1, 'Sucre', 500, true),
-      ], <(int, int)>[(2, 1000)]),
-      ('Afi', '96 45 67 89', [
-        (12, 'Savon', 700, true),
-        (9, 'Tomate', 1200, false),
-      ], <(int, int)>[]),
-      ('Sènan', '95 22 33 44', [
-        (0, 'Pain', 300, true),
-        (0, 'Lait', 900, false),
-      ], <(int, int)>[]),
-      ('Rachid', '61 78 90 12', [
-        (20, 'Gaz', 6500, false),
-      ], <(int, int)>[(15, 3000)]),
-      ('Nadège', '97 88 77 66', [
-        (4, 'Farine', 2000, true),
-        (2, 'Oeufs', 1500, true),
-      ], <(int, int)>[(1, 3500)]),
-      ('Kossi', '99 11 22 33', [
-        (8, 'Spaghetti', 1100, true),
-        (6, 'Sardine', 1300, false),
-        (2, 'Riz', 2500, true),
-      ], <(int, int)>[(5, 1000)]),
+      (
+        'Codjo',
+        '97 12 34 56',
+        [
+          (5, 'Riz', 1500, true),
+          (3, 'Huile', 800, true),
+          (1, 'Sucre', 500, true),
+        ],
+        <(int, int)>[(2, 1000)],
+      ),
+      (
+        'Afi',
+        '96 45 67 89',
+        [(12, 'Savon', 700, true), (9, 'Tomate', 1200, false)],
+        <(int, int)>[],
+      ),
+      (
+        'Sènan',
+        '95 22 33 44',
+        [(0, 'Pain', 300, true), (0, 'Lait', 900, false)],
+        <(int, int)>[],
+      ),
+      (
+        'Rachid',
+        '61 78 90 12',
+        [(20, 'Gaz', 6500, false)],
+        <(int, int)>[(15, 3000)],
+      ),
+      (
+        'Nadège',
+        '97 88 77 66',
+        [(4, 'Farine', 2000, true), (2, 'Oeufs', 1500, true)],
+        <(int, int)>[(1, 3500)],
+      ),
+      (
+        'Kossi',
+        '99 11 22 33',
+        [
+          (8, 'Spaghetti', 1100, true),
+          (6, 'Sardine', 1300, false),
+          (2, 'Riz', 2500, true),
+        ],
+        <(int, int)>[(5, 1000)],
+      ),
     ];
+
+    // Dates promises de démo : Afi a dépassé sa date, Rachid promet dans 2 jours,
+    // Sènan promet demain.
+    final promises = <String, DateTime>{
+      'Afi': now.subtract(const Duration(days: 3)),
+      'Rachid': now.add(const Duration(days: 2)),
+      'Sènan': now.add(const Duration(days: 1)),
+    };
 
     for (int i = 0; i < demo.length; i++) {
       final (name, phone, credits, payments) = demo[i];
@@ -388,6 +485,7 @@ class ArdoiseProvider extends ChangeNotifier {
         phone: phone,
         createdAt: now.subtract(const Duration(days: 30)),
         colorIndex: i % 8,
+        promiseDate: promises[name],
       );
       _clients.add(c);
       await _storage.saveClient(c);
@@ -410,7 +508,9 @@ class ArdoiseProvider extends ChangeNotifier {
           clientId: c.id,
           type: TransactionType.payment,
           amount: amount,
-          method: daysAgo.isEven ? PaymentMethod.mobileMoney : PaymentMethod.cash,
+          method: daysAgo.isEven
+              ? PaymentMethod.mobileMoney
+              : PaymentMethod.cash,
           label: daysAgo.isEven ? 'Mobile Money' : 'Espèces',
           date: now.subtract(Duration(days: daysAgo, hours: 1)),
         );

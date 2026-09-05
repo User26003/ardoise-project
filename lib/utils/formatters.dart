@@ -28,6 +28,22 @@ class Fmt {
     return DateFormat('d MMM yyyy', 'fr_FR').format(d);
   }
 
+  /// "Promis demain", "Promis le 12 mars", "Dépassé de 3 j"
+  static String promiseLabel(DateTime d) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final day = DateTime(d.year, d.month, d.day);
+    final diff = day.difference(today).inDays;
+    if (diff < 0) return 'Dépassé de ${-diff} j';
+    if (diff == 0) return "Promis aujourd'hui";
+    if (diff == 1) return 'Promis demain';
+    if (diff < 7) return 'Promis dans $diff j';
+    return 'Promis le ${DateFormat('d MMM', 'fr_FR').format(d)}';
+  }
+
+  static String shortDate(DateTime d) =>
+      DateFormat('d MMM yyyy', 'fr_FR').format(d);
+
   static String fullDate(DateTime d) =>
       DateFormat('EEEE d MMMM yyyy', 'fr_FR').format(d);
 
